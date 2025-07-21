@@ -1,107 +1,116 @@
 package auth
 
 import (
-    "context"
-    "net/http"
+	"context"
+	"fmt"
+	"net/http"
 
-    "github.com/gin-gonic/gin"
-    "gorm.io/gorm"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	googleOAuth2 "google.golang.org/api/oauth2/v2"
 
-    "golang.org/x/oauth2"
-    "golang.org/x/oauth2/google"
-    googleOAuth2 "google.golang.org/api/oauth2/v2" // ✅ Correct import for user info retrieval
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
-    "github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/models"
-    "github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/utils"
+	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/models"
+	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/utils"
 )
 
-var googleOAuthConfig = &oauth2.Config{
-    ClientID:     utils.GetEnv("GOOGLE_CLIENT_ID", ""),
-    ClientSecret: utils.GetEnv("GOOGLE_CLIENT_SECRET", ""),
-    RedirectURL:  utils.GetEnv("REDIRECT_URL", ""),
-    Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
-    Endpoint:     google.Endpoint,
+var googleOAuthConfig *oauth2.Config
+
+// Lazy GetGoogleOAuthConfig ensures env vars are loaded
+func GetGoogleOAuthConfig() *oauth2.Config {
+	if googleOAuthConfig == nil {
+		googleOAuthConfig = &oauth2.Config{
+			ClientID:     utils.GetEnv("GOOGLE_CLIENT_ID", ""),
+			ClientSecret: utils.GetEnv("GOOGLE_CLIENT_SECRET", ""),
+			RedirectURL:  utils.GetEnv("REDIRECT_URL", ""),
+			Scopes: []string{
+				"https://www.googleapis.com/auth/userinfo.profile",
+				"https://www.googleapis.com/auth/userinfo.email",
+			},
+			Endpoint: google.Endpoint,
+		}
+	}
+	return googleOAuthConfig
 }
 
-// GoogleLogin initiates the OAuth2 login process
+// GoogleLogin → redirects to Google login page
 func GoogleLogin() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        url := googleOAuthConfig.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-        c.Redirect(http.StatusTemporaryRedirect, url)
-    }
+	return func(c *gin.Context) {
+		url := GetGoogleOAuthConfig().AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+		fmt.Println("[DEBUG] Redirecting to:", url)
+		c.Redirect(http.StatusTemporaryRedirect, url)
+	}
 }
 
-// GoogleCallback handles the callback from Google OAuth2
+// GoogleCallback → handles Google callback response
 func GoogleCallback(db *gorm.DB) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        code := c.Query("code")
-        if code == "" {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "Missing code"})
-            return
-        }
+	return func(c *gin.Context) {
+		code := c.Query("code")
+		if code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing code parameter"})
+			return
+		}
 
-        // Exchange code for token
-        token, err := googleOAuthConfig.Exchange(context.Background(), code)
-        if err != nil {
-            c.JSON(http.StatusUnauthorized, gin.H{"error": "Token exchange failed"})
-            return
-        }
+		token, err := GetGoogleOAuthConfig().Exchange(context.Background(), code)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token exchange failed", "details": err.Error()})
+			return
+		}
 
-        // Use token to create a client
-        client := googleOAuthConfig.Client(context.Background(), token)
+		client := GetGoogleOAuthConfig().Client(context.Background(), token)
 
-        // Create OAuth2 service to fetch user info
-        svc, err := googleOAuth2.New(client)
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Google service"})
-            return
-        }
+		svc, err := googleOAuth2.New(client)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Google service"})
+			return
+		}
 
-        userInfo, err := svc.Userinfo.Get().Do()
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info from Google"})
-            return
-        }
+		userInfo, err := svc.Userinfo.Get().Do()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info", "details": err.Error()})
+			return
+		}
 
-        // Check if user exists in DB
-        var user models.Consumer
-        if err := db.Where("email = ?", userInfo.Email).First(&user).Error; err != nil {
-            // If not, create the user
-            user = models.Consumer{
-                Email:    userInfo.Email,
-                Name:     userInfo.Name,
-                Password: "", // empty password as we use Google
-                Address:  "",
-                Phone:    "",
-            }
-            if err := db.Create(&user).Error; err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-                return
-            }
-        }
+		// Check/Create user (consumer)
+		var user models.Consumer
+		if err := db.Where("email = ?", userInfo.Email).First(&user).Error; err != nil {
+			// No user found → create new
+			user = models.Consumer{
+				Email:    userInfo.Email,
+				Name:     userInfo.Name,
+				Password: "", // Google login doesn't use password
+				Address:  "",
+				Phone:    "",
+			}
+			if err := db.Create(&user).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create new user"})
+				return
+			}
+		}
 
-        // Generate access and refresh tokens
-        accessToken, expiry, err := GenerateAccessToken(user.ID.String(), "consumer")
-        if err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Token generation error"})
-            return
-        }
+		// Create tokens
+		accessToken, expiresAt, err := GenerateAccessToken(user.ID.String(), "consumer")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
+			return
+		}
 
-        refreshToken := GenerateRefreshToken()
-        if err := SaveToken(db, user.ID, "consumer", accessToken, refreshToken, expiry); err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store tokens"})
-            return
-        }
+		refreshToken := GenerateRefreshToken()
+		if err := SaveToken(db, user.ID, "consumer", accessToken, refreshToken, expiresAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store token"})
+			return
+		}
 
-        // Respond with tokens
-        c.JSON(http.StatusOK, gin.H{
-            "message":        "Logged in via Google",
-            "access_token":   accessToken,
-            "refresh_token":  refreshToken,
-            "expires_at":     expiry,
-            "user":           user.Name,
-            "email":          user.Email,
-            "login_method":   "google",
-        })
-    }
+		c.JSON(http.StatusOK, gin.H{
+			"message":       "Logged in via Google",
+			"user_email":    user.Email,
+			"user_name":     user.Name,
+			"access_token":  accessToken,
+			"refresh_token": refreshToken,
+			"expires_at":    expiresAt,
+			"login_method":  "google",
+		})
+	}
 }
