@@ -1,7 +1,6 @@
 package main
 
 import (
-	
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -19,15 +18,15 @@ func main() {
 	dsn := utils.GetEnv("DATABASE_URL", "")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal("Failed to connect to DB:", err)
+		log.Fatal("❌ Failed to connect database:", err)
 	}
 
-	_ = db.AutoMigrate(&models.Admin{}, &models.Consumer{}, &models.Supplier{}, &models.Token{})
+	_ = db.AutoMigrate(&models.Consumer{}, &models.Token{}) // Add others as needed
 
 	r := gin.Default()
 	routes.SetupRoutes(r, db)
 
 	port := utils.GetEnv("APP_PORT", "8080")
-	log.Printf("Server running on http://localhost:%s", port)
-	r.Run(":" + port)
+	log.Println("✅ Server running at http://localhost:" + port)
+	log.Fatal(r.Run(":" + port))
 }
