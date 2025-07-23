@@ -2,14 +2,13 @@ package main
 
 import (
 	"log"
-
-	"github.com/gin-gonic/gin"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/driver/postgres"
+	"github.com/gin-gonic/gin"
 
-	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/models"
-	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/routes"
 	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/utils"
+	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/routes"
+	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/models"
 )
 
 func main() {
@@ -18,15 +17,21 @@ func main() {
 	dsn := utils.GetEnv("DATABASE_URL", "")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal("❌ Failed to connect database:", err)
+		log.Fatal("Failed to connect to DB:", err)
 	}
 
-	_ = db.AutoMigrate(&models.Consumer{}, &models.Token{}) // Add others as needed
+	// Migrate all role models + token
+	_ = db.AutoMigrate(
+		&models.Token{},
+		&models.Admin{},
+		&models.Consumer{},
+		&models.Supplier{},
+	)
 
-	r := gin.Default()
-	routes.SetupRoutes(r, db)
+	router := gin.Default()
+	routes.SetupRoutes(router, db)
 
 	port := utils.GetEnv("APP_PORT", "8080")
-	log.Println("✅ Server running at http://localhost:" + port)
-	log.Fatal(r.Run(":" + port))
+	log.Println("🚀 Server running on http://localhost:" + port)
+	router.Run(":" + port)
 }
