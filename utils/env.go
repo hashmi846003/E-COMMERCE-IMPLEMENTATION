@@ -9,13 +9,13 @@ import (
 
 func LoadEnv() {
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found.")
+		log.Println("No .env file found")
 	}
 }
 
-func GetEnv(key, fallback string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+func GetEnv(key string, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
 	return fallback
 }
