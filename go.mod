@@ -13,6 +13,8 @@ require (
 	gorm.io/gorm v1.30.0
 )
 
+require golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect
+
 require (
 	cloud.google.com/go/auth v0.16.3 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
@@ -21,6 +23,7 @@ require (
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
+	github.com/disintegration/imaging v1.6.2
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
