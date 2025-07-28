@@ -82,3 +82,21 @@ func SupplierImageUploadHandler(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Image uploaded, cropped, and watermarked successfully"})
 	}
 }
+func SupplierImageFetchHandler(db *gorm.DB) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        email := c.Param("email")
+        var supplier models.Supplier
+        if err := db.Where("email = ?", email).First(&supplier).Error; err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "Supplier not found"})
+            return
+        }
+
+        if len(supplier.Image) == 0 {
+            c.JSON(http.StatusNotFound, gin.H{"error": "No image found for supplier"})
+            return
+        }
+
+        // Write image bytes with appropriate content-type (assuming PNG as used in encoding)
+        c.Data(http.StatusOK, "image/png", supplier.Image)
+    }
+}
