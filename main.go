@@ -34,6 +34,8 @@ func main() {
 
 	// --- Supplier section: image uploading, cropping, watermark ---
 	router.POST("/supplier/profile-image/:email", handlers.SupplierImageUploadHandler(db))
+	router.GET("/supplier/profile-image/:email", handlers.SupplierImageFetchHandler(db))
+
 
 	port := utils.GetEnv("APP_PORT", "8080")
 	log.Println("🚀 Server running on http://localhost:" + port)
