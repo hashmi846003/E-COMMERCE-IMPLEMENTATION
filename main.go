@@ -2,13 +2,13 @@ package main
 
 import (
 	"log"
-	"gorm.io/gorm"
-	"gorm.io/driver/postgres"
-	"github.com/gin-gonic/gin"
 
-	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/utils"
-	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/routes"
+	"github.com/gin-gonic/gin"
 	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/models"
+	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/routes"
+	"github.com/hashmi846003/E-COMMERCE-IMPLEMENTATION/utils"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -31,7 +31,14 @@ func main() {
 	router := gin.Default()
 	routes.SetupRoutes(router, db)
 
+	// --- Supplier section: image uploading, cropping, watermark ---
+	router.POST("/supplier/profile-image/:email", SupplierImageUploadHandler(db))
+
 	port := utils.GetEnv("APP_PORT", "8080")
 	log.Println("🚀 Server running on http://localhost:" + port)
 	router.Run(":" + port)
+}
+
+func SupplierImageUploadHandler(db *gorm.DB) gin.HandlerFunc {
+	panic("unimplemented")
 }
